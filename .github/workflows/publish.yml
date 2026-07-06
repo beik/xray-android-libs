@@ -1,0 +1,125 @@
+name: Publish Xray-core to GitHub Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Xray-core version (e.g., 26.3.27)'
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - name: Download Xray-core binaries
+        run: |
+          mkdir -p xray-binaries
+          cd xray-binaries
+          
+          # Download Android ARM64
+          wget -q https://github.com/XTLS/Xray-core/releases/download/v${{ github.event.inputs.version }}/Xray-android-arm64-v8a.zip
+          unzip -q Xray-android-arm64-v8a.zip -d android-arm64
+          rm Xray-android-arm64-v8a.zip
+          
+          # Download Android AMD64 (if available)
+          if wget -q --spider https://github.com/XTLS/Xray-core/releases/download/v${{ github.event.inputs.version }}/Xray-android-amd64.zip; then
+            wget -q https://github.com/XTLS/Xray-core/releases/download/v${{ github.event.inputs.version }}/Xray-android-amd64.zip
+            unzip -q Xray-android-amd64.zip -d android-amd64
+            rm Xray-android-amd64.zip
+          else
+            echo "AMD64 version not available, skipping"
+          fi
+          
+          echo "Downloaded Xray-core v${{ github.event.inputs.version }}"
+          ls -la
+      
+      - name: Create Maven structure
+        run: |
+          # Create Maven directory structure
+          mkdir -p maven-repo/com/zeroping/xray-core/${{ github.event.inputs.version }}
+          
+          # Create POM file
+          cat > maven-repo/com/zeroping/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <modelVersion>4.0.0</modelVersion>
+            <groupId>com.zeroping</groupId>
+            <artifactId>xray-core</artifactId>
+            <version>${{ github.event.inputs.version }}</version>
+            <packaging>aar</packaging>
+            <name>Xray-core</name>
+            <description>Xray-core binaries for Android</description>
+            <url>https://github.com/XTLS/Xray-core</url>
+            <licenses>
+              <license>
+                <name>GNU General Public License v3.0</name>
+                <url>https://github.com/XTLS/Xray-core/blob/main/LICENSE</url>
+              </license>
+            </licenses>
+          </project>
+          EOF
+          
+          # Create AAR archive (ARM64 only)
+          AAR_DIR=$(pwd)/maven-repo/com/zeroping/xray-core/${{ github.event.inputs.version }}
+          TEMP_DIR=$(mktemp -d)
+          
+          mkdir -p $TEMP_DIR/jni/arm64-v8a
+          cp xray-binaries/android-arm64/xray $TEMP_DIR/jni/arm64-v8a/libxray.so
+          cp xray-binaries/android-arm64/geoip.dat $TEMP_DIR/
+          cp xray-binaries/android-arm64/geosite.dat $TEMP_DIR/
+          
+          # Create AndroidManifest.xml
+          cat > $TEMP_DIR/AndroidManifest.xml << 'MANIFEST'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.zeroping.xray">
+          </manifest>
+          MANIFEST
+          
+          # Create classes.jar (empty)
+          CLASSES_DIR=$(mktemp -d)
+          cd $CLASSES_DIR
+          jar cf $TEMP_DIR/classes.jar .
+          cd $(pwd)
+          
+          # Package AAR
+          cd $TEMP_DIR
+          zip -r $AAR_DIR/xray-core-${{ github.event.inputs.version }}.aar .
+          
+          echo "Created Maven repository structure"
+          ls -la $AAR_DIR/
+      
+      - name: Publish to GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd maven-repo
+          
+          # Upload POM
+          curl -X PUT \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            --data-binary "@com/zeroping/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom" \
+            "https://maven.pkg.github.com/${{ github.repository }}/com/zeroping/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom"
+          
+          # Upload AAR
+          curl -X PUT \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            --data-binary "@com/zeroping/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar" \
+            "https://maven.pkg.github.com/${{ github.repository }}/com/zeroping/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar"
+          
+          echo "Published to GitHub Packages"
