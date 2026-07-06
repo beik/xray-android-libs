@@ -28,7 +28,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.23'
       
       - name: Install gomobile
         run: |
@@ -43,11 +43,129 @@ jobs:
           go mod tidy
           go get golang.org/x/mobile/cmd/gobind
       
-      - name: Create libxray binding
+      - name: Create libxray binding (v2rayNG style)
         run: |
           cd Xray-core
           mkdir -p libxray
-          printf '%s\n' 'package libxray' '' 'import (' '	"fmt"' '	"strings"' '' '	"github.com/xtls/xray-core/core"' '	_ "github.com/xtls/xray-core/main/json"' '	_ "github.com/xtls/xray-core/main/distro/all"' ')' '' 'var instance *core.Instance' '' 'func StartXray(configJson string) error {' '	if instance != nil {' '		return fmt.Errorf("xray is already running")' '	}' '	config, err := core.LoadConfig("json", strings.NewReader(configJson))' '	if err != nil {' '		return fmt.Errorf("failed to load config: %v", err)' '	}' '	instance, err = core.New(config)' '	if err != nil {' '		return fmt.Errorf("failed to create instance: %v", err)' '	}' '	if err := instance.Start(); err != nil {' '		instance = nil' '		return fmt.Errorf("failed to start: %v", err)' '	}' '	return nil' '}' '' 'func StopXray() error {' '	if instance == nil {' '		return fmt.Errorf("xray is not running")' '	}' '	if err := instance.Close(); err != nil {' '		return fmt.Errorf("failed to stop: %v", err)' '	}' '	instance = nil' '	return nil' '}' '' 'func GetVersion() string {' '	return core.Version()' '}' > libxray/libxray.go
+          
+          # 创建类似 v2rayNG 的 V2rayPoint 接口
+          cat > libxray/libxray.go << 'GOEOF'
+          package libxray
+          
+          import (
+          	"fmt"
+          	"strings"
+          	"sync"
+          
+          	"github.com/xtls/xray-core/core"
+          	_ "github.com/xtls/xray-core/main/json"
+          	_ "github.com/xtls/xray-core/main/distro/all"
+          )
+          
+          var (
+          	instance *core.Instance
+          	mu       sync.Mutex
+          	callback V2rayPointCallback
+          )
+          
+          // V2rayPointCallback 接口（类似 v2rayNG）
+          type V2rayPointCallback interface {
+          	OnEmitLog(message string)
+          	OnEmitStatus(status int, msg string)
+          }
+          
+          // V2rayPoint 是核心控制点
+          type V2rayPoint struct {
+          	isRunning bool
+          }
+          
+          // NewV2rayPoint 创建新的控制点
+          func NewV2rayPoint() *V2rayPoint {
+          	return &V2rayPoint{}
+          }
+          
+          // SetCallback 设置回调
+          func (p *V2rayPoint) SetCallback(cb V2rayPointCallback) {
+          	callback = cb
+          }
+          
+          // RunXray 启动 Xray 核心
+          func (p *V2rayPoint) RunXray(configJson string) error {
+          	mu.Lock()
+          	defer mu.Unlock()
+          
+          	if p.isRunning {
+          		return fmt.Errorf("xray is already running")
+          	}
+          
+          	config, err := core.LoadConfig("json", strings.NewReader(configJson))
+          	if err != nil {
+          		if callback != nil {
+          			callback.OnEmitLog(fmt.Sprintf("Failed to load config: %v", err))
+          		}
+          		return fmt.Errorf("failed to load config: %v", err)
+          	}
+          
+          	instance, err = core.New(config)
+          	if err != nil {
+          		if callback != nil {
+          			callback.OnEmitLog(fmt.Sprintf("Failed to create instance: %v", err))
+          		}
+          		return fmt.Errorf("failed to create instance: %v", err)
+          	}
+          
+          	if err := instance.Start(); err != nil {
+          		instance = nil
+          		if callback != nil {
+          			callback.OnEmitLog(fmt.Sprintf("Failed to start: %v", err))
+          		}
+          		return fmt.Errorf("failed to start: %v", err)
+          	}
+          
+          	p.isRunning = true
+          	if callback != nil {
+          		callback.OnEmitStatus(1, "running")
+          		callback.OnEmitLog("Xray started successfully")
+          	}
+          
+          	return nil
+          }
+          
+          // StopXray 停止 Xray 核心
+          func (p *V2rayPoint) StopXray() error {
+          	mu.Lock()
+          	defer mu.Unlock()
+          
+          	if !p.isRunning || instance == nil {
+          		return fmt.Errorf("xray is not running")
+          	}
+          
+          	if err := instance.Close(); err != nil {
+          		return fmt.Errorf("failed to stop: %v", err)
+          	}
+          
+          	instance = nil
+          	p.isRunning = false
+          
+          	if callback != nil {
+          		callback.OnEmitStatus(0, "stopped")
+          		callback.OnEmitLog("Xray stopped")
+          	}
+          
+          	return nil
+          }
+          
+          // IsRunning 检查是否运行中
+          func (p *V2rayPoint) IsRunning() bool {
+          	return p.isRunning
+          }
+          
+          // GetVersion 获取 Xray 版本
+          func GetXrayVersion() string {
+          	return core.Version()
+          }
+          GOEOF
+          
           echo "Created libxray.go"
           cat libxray/libxray.go
       
@@ -62,26 +180,30 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           cd Xray-core
-          gomobile bind -v -target=android/arm64 -androidapi 21 -o ../LibXray.aar ./libxray
-          echo "Built LibXray.aar"
-          ls -lh ../LibXray.aar
+          gomobile bind -v \
+            -target=android/arm64 \
+            -androidapi 21 \
+            -o ../libxray.aar \
+            ./libxray
+          echo "Built libxray.aar"
+          ls -lh ../libxray.aar
       
       - name: Create Maven structure
         run: |
-          mkdir -p maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}
-          cp LibXray.aar maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar
+          mkdir -p maven-repo/com/zero/libxray/${{ github.event.inputs.version }}
+          cp libxray.aar maven-repo/com/zero/libxray/${{ github.event.inputs.version }}/libxray-${{ github.event.inputs.version }}.aar
           
-          cat > maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom << 'POMEOF'
+          cat > maven-repo/com/zero/libxray/${{ github.event.inputs.version }}/libxray-${{ github.event.inputs.version }}.pom << 'POMEOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
             <modelVersion>4.0.0</modelVersion>
             <groupId>com.zero</groupId>
-            <artifactId>xray-core</artifactId>
+            <artifactId>libxray</artifactId>
             <version>VERSION_PLACEHOLDER</version>
             <packaging>aar</packaging>
-            <name>Xray-core</name>
-            <description>Xray-core AAR with Java bindings for Android</description>
+            <name>LibXray</name>
+            <description>Xray-core Android library with V2rayPoint interface (v2rayNG style)</description>
             <url>https://github.com/XTLS/Xray-core</url>
             <licenses>
               <license>
@@ -92,25 +214,27 @@ jobs:
           </project>
           POMEOF
           
-          sed -i "s/VERSION_PLACEHOLDER/${{ github.event.inputs.version }}/g" maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom
+          sed -i "s/VERSION_PLACEHOLDER/${{ github.event.inputs.version }}/g" maven-repo/com/zero/libxray/${{ github.event.inputs.version }}/libxray-${{ github.event.inputs.version }}.pom
           
           echo "Created Maven repository structure"
-          ls -la maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}/
+          ls -la maven-repo/com/zero/libxray/${{ github.event.inputs.version }}/
       
       - name: Publish to GitHub Packages
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: *** secrets.GITHUB_TOKEN }}
         run: |
           cd maven-repo
           
+          # Upload POM
           curl -X PUT \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            --data-binary "@com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom" \
-            "https://maven.pkg.github.com/${{ github.repository }}/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom"
+            -H "Authorization: Bearer *** \
+            --data-binary "@com/zero/libxray/${{ github.event.inputs.version }}/libxray-${{ github.event.inputs.version }}.pom" \
+            "https://maven.pkg.github.com/${{ github.repository }}/com/zero/libxray/${{ github.event.inputs.version }}/libxray-${{ github.event.inputs.version }}.pom"
           
+          # Upload AAR
           curl -X PUT \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            --data-binary "@com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar" \
-            "https://maven.pkg.github.com/${{ github.repository }}/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar"
+            -H "Authorization: Bearer *** \
+            --data-binary "@com/zero/libxray/${{ github.event.inputs.version }}/libxray-${{ github.event.inputs.version }}.aar" \
+            "https://maven.pkg.github.com/${{ github.repository }}/com/zero/libxray/${{ github.event.inputs.version }}/libxray-${{ github.event.inputs.version }}.aar"
           
           echo "Published to GitHub Packages"
