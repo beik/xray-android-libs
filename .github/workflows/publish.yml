@@ -41,6 +41,7 @@ jobs:
           git clone --depth=1 --branch v${{ github.event.inputs.version }} https://github.com/XTLS/Xray-core.git
           cd Xray-core
           go mod tidy
+          go get golang.org/x/mobile/cmd/gobind
       
       - name: Create libxray binding
         run: |
