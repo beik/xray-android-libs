@@ -51,9 +51,15 @@ jobs:
           echo "Created libxray.go"
           cat libxray/libxray.go
       
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r25c
+      
       - name: Build AAR with gomobile
         env:
-          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           cd Xray-core
           gomobile bind -v -target=android/arm64 -androidapi 21 -o ../LibXray.aar ./libxray
