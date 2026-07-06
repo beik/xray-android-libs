@@ -114,12 +114,12 @@ jobs:
           curl -X PUT \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             --data-binary "@com/zeroping/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom" \
-            "https://maven.pkg.github.com/beik/singbox-android-libs/com/zeroping/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom"
+            "https://maven.pkg.github.com/${{ github.repository }}/com/zeroping/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom"
           
           # Upload AAR
           curl -X PUT \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             --data-binary "@com/zeroping/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar" \
-            "https://maven.pkg.github.com/beik/singbox-android-libs/com/zeroping/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar"
+            "https://maven.pkg.github.com/${{ github.repository }}/com/zeroping/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar"
           
           echo "Published to GitHub Packages"
