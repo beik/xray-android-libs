@@ -221,7 +221,7 @@ jobs:
       
       - name: Publish to GitHub Packages
         env:
-          GITHUB_TOKEN: *** secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd maven-repo
           
