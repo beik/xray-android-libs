@@ -1,10 +1,10 @@
-name: Publish Xray-core to GitHub Packages
+name: Publish Xray-core AAR to GitHub Packages
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Xray-core version (e.g., 26.3.27)'
+        description: 'Xray-core version (e.g., 25.12.8)'
         required: true
         type: string
 
@@ -25,45 +25,55 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       
-      - name: Download Xray-core binaries
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      
+      - name: Install gomobile
         run: |
-          mkdir -p xray-binaries
-          cd xray-binaries
-          
-          # Download Android ARM64
-          wget -q https://github.com/XTLS/Xray-core/releases/download/v${{ github.event.inputs.version }}/Xray-android-arm64-v8a.zip
-          unzip -q Xray-android-arm64-v8a.zip -d android-arm64
-          rm Xray-android-arm64-v8a.zip
-          
-          # Download Android AMD64 (if available)
-          if wget -q --spider https://github.com/XTLS/Xray-core/releases/download/v${{ github.event.inputs.version }}/Xray-android-amd64.zip; then
-            wget -q https://github.com/XTLS/Xray-core/releases/download/v${{ github.event.inputs.version }}/Xray-android-amd64.zip
-            unzip -q Xray-android-amd64.zip -d android-amd64
-            rm Xray-android-amd64.zip
-          else
-            echo "AMD64 version not available, skipping"
-          fi
-          
-          echo "Downloaded Xray-core v${{ github.event.inputs.version }}"
-          ls -la
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+      
+      - name: Clone Xray-core
+        run: |
+          git clone --depth=1 --branch v${{ github.event.inputs.version }} https://github.com/XTLS/Xray-core.git
+          cd Xray-core
+          go mod tidy
+      
+      - name: Create libxray binding
+        run: |
+          cd Xray-core
+          mkdir -p libxray
+          echo 'cGFja2FnZSBsaWJ4cmF5CgppbXBvcnQgKAoJImZtdCIKCSJzdHJpbmdzIgoKCSJnaXRodWIuY29tL3h0bHMveHJheS1jb3JlL2NvcmUiCglfICJnaXRodWIuY29tL3h0bHMveHJheS1jb3JlL21haW4vanNvbiIKCV8gImdpdGh1Yi5jb20veHRscy94cmF5LWNvcmUvcHJveHkvZnJlZWRvbSIKCV8gImdpdGh1Yi5jb20veHRscy94cmF5LWNvcmUvcHJveHkvc29ja3MiCglfICJnaXRodWIuY29tL3h0bHMveHJheS1jb3JlL3Byb3h5L2h0dHAiCglfICJnaXRodWIuY29tL3h0bHMveHJheS1jb3JlL3RyYW5zcG9ydC9pbnRlcm5ldC90Y3AiCglfICJnaXRodWIuY29tL3h0bHMveHJheS1jb3JlL3RyYW5zcG9ydC9pbnRlcm5ldC91ZHAiCikKCnZhciBpbnN0YW5jZSAqY29yZS5JbnN0YW5jZQoKZnVuYyBTdGFydFhyYXkoY29uZmlnSnNvbiBzdHJpbmcpIGVycm9yIHsKCWlmIGluc3RhbmNlICE9IG5pbCB7CgkJcmV0dXJuIGZtdC5FcnJvcmYoInhcmF5IGlzIGFscmVhZHkgcnVubmluZyIpCgl9CgoJY29uZmlnLCBlcnIgOj0gY29yZS5Mb2FkQ29uZmlnKCJqc29uIiwgc3RyaW5ncy5OZXdSZWFkZXIoY29uZmlnSnNvbikpCglpZiBlcnIgIT0gbmlsIHsKCQlyZXR1cm4gZm10LkVycm9yZigiZmFpbGVkIHRvIGxvYWQgY29uZmlnOiAldiIsIGVycikKCX0KCglpbnN0YW5jZSwgZXJyID0gY29yZS5OZXcoY29uZmlnKQoJaWYgZXJyICE9IG5pbCB7CgkJcmV0dXJuIGZtdC5FcnJvcmYoImZhaWxlZCB0byBjcmVhdGUgaW5zdGFuY2U6ICV2IiwgZXJyKQoJfQoKCWlmIGVyciA6PSBpbnN0YW5jZS5TdGFydCgpOyBlcnIgIT0gbmlsIHsKCQlpbnN0YW5jZSA9IG5pbAoJCXJldHVybiBmbXQuRXJyb3JmKCJmYWlsZWQgdG8gc3RhcnQ6ICV2IiwgZXJyKQoJfQoKCXJldHVybiBuaWwKfQoKZnVuYyBTdG9wWHJheSgpIGVycm9yIHsKCWlmIGluc3RhbmNlID09IG5pbCB7CgkJcmV0dXJuIGZtdC5FcnJvcmYoInhcmF5IGlzIG5vdCBydW5uaW5nIikKCX0KCglpZiBlcnIgOj0gaW5zdGFuY2UuQ2xvc2UoKTsgZXJyICE9IG5pbCB7CgkJcmV0dXJuIGZtdC5FcnJvcmYoImZhaWxlZCB0byBzdG9wOiAldiIsIGVycikKCX0KCglpbnN0YW5jZSA9IG5pbAoJcmV0dXJuIG5pbAp9CgpmdW5jIEdldFZlcnNpb24oKSBzdHJpbmcgewoJcmV0dXJuIGNvcmUuVmVyc2lvbigpCn0K' | base64 -d > libxray/libxray.go
+          cat libxray/libxray.go
+      
+      - name: Build AAR with gomobile
+        env:
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk
+        run: |
+          cd Xray-core
+          gomobile bind -v -target=android/arm64 -androidapi 21 -o ../LibXray.aar ./libxray
+          echo "Built LibXray.aar"
+          ls -lh ../LibXray.aar
       
       - name: Create Maven structure
         run: |
-          # Create Maven directory structure
           mkdir -p maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}
+          cp LibXray.aar maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar
           
-          # Create POM file
-          cat > maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom << EOF
+          cat > maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom << 'POMEOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
             <modelVersion>4.0.0</modelVersion>
             <groupId>com.zero</groupId>
             <artifactId>xray-core</artifactId>
-            <version>${{ github.event.inputs.version }}</version>
+            <version>VERSION_PLACEHOLDER</version>
             <packaging>aar</packaging>
             <name>Xray-core</name>
-            <description>Xray-core binaries for Android</description>
+            <description>Xray-core AAR with Java bindings for Android</description>
             <url>https://github.com/XTLS/Xray-core</url>
             <licenses>
               <license>
@@ -72,53 +82,26 @@ jobs:
               </license>
             </licenses>
           </project>
-          EOF
+          POMEOF
           
-          # Create AAR archive (ARM64 only)
-          AAR_DIR=$(pwd)/maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}
-          TEMP_DIR=$(mktemp -d)
-          
-          mkdir -p $TEMP_DIR/jni/arm64-v8a
-          cp xray-binaries/android-arm64/xray $TEMP_DIR/jni/arm64-v8a/libxray.so
-          cp xray-binaries/android-arm64/geoip.dat $TEMP_DIR/
-          cp xray-binaries/android-arm64/geosite.dat $TEMP_DIR/
-          
-          # Create AndroidManifest.xml
-          cat > $TEMP_DIR/AndroidManifest.xml << 'MANIFEST'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-              package="com.zero.xray">
-          </manifest>
-          MANIFEST
-          
-          # Create classes.jar (empty)
-          CLASSES_DIR=$(mktemp -d)
-          cd $CLASSES_DIR
-          jar cf $TEMP_DIR/classes.jar .
-          cd $(pwd)
-          
-          # Package AAR
-          cd $TEMP_DIR
-          zip -r $AAR_DIR/xray-core-${{ github.event.inputs.version }}.aar .
+          sed -i "s/VERSION_PLACEHOLDER/${{ github.event.inputs.version }}/g" maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom
           
           echo "Created Maven repository structure"
-          ls -la $AAR_DIR/
+          ls -la maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}/
       
       - name: Publish to GitHub Packages
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: *** secrets.GITHUB_TOKEN }}
         run: |
           cd maven-repo
           
-          # Upload POM
           curl -X PUT \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Authorization: Bearer *** \
             --data-binary "@com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom" \
             "https://maven.pkg.github.com/${{ github.repository }}/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom"
           
-          # Upload AAR
           curl -X PUT \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Authorization: Bearer *** \
             --data-binary "@com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar" \
             "https://maven.pkg.github.com/${{ github.repository }}/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar"
           
