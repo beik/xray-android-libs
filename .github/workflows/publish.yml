@@ -91,17 +91,17 @@ jobs:
       
       - name: Publish to GitHub Packages
         env:
-          GITHUB_TOKEN: *** secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd maven-repo
           
           curl -X PUT \
-            -H "Authorization: Bearer *** \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
             --data-binary "@com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom" \
             "https://maven.pkg.github.com/${{ github.repository }}/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom"
           
           curl -X PUT \
-            -H "Authorization: Bearer *** \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
             --data-binary "@com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar" \
             "https://maven.pkg.github.com/${{ github.repository }}/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar"
           
