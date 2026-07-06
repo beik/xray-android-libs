@@ -50,15 +50,15 @@ jobs:
       - name: Create Maven structure
         run: |
           # Create Maven directory structure
-          mkdir -p maven-repo/com/beik/xray-core/${{ github.event.inputs.version }}
+          mkdir -p maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}
           
           # Create POM file
-          cat > maven-repo/com/beik/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom << EOF
+          cat > maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
             <modelVersion>4.0.0</modelVersion>
-            <groupId>com.beik</groupId>
+            <groupId>com.zero</groupId>
             <artifactId>xray-core</artifactId>
             <version>${{ github.event.inputs.version }}</version>
             <packaging>aar</packaging>
@@ -75,7 +75,7 @@ jobs:
           EOF
           
           # Create AAR archive (ARM64 only)
-          AAR_DIR=$(pwd)/maven-repo/com/beik/xray-core/${{ github.event.inputs.version }}
+          AAR_DIR=$(pwd)/maven-repo/com/zero/xray-core/${{ github.event.inputs.version }}
           TEMP_DIR=$(mktemp -d)
           
           mkdir -p $TEMP_DIR/jni/arm64-v8a
@@ -87,7 +87,7 @@ jobs:
           cat > $TEMP_DIR/AndroidManifest.xml << 'MANIFEST'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-              package="com.beik.xray">
+              package="com.zero.xray">
           </manifest>
           MANIFEST
           
@@ -113,13 +113,13 @@ jobs:
           # Upload POM
           curl -X PUT \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
-            --data-binary "@com/beik/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom" \
-            "https://maven.pkg.github.com/${{ github.repository }}/com/beik/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom"
+            --data-binary "@com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom" \
+            "https://maven.pkg.github.com/${{ github.repository }}/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.pom"
           
           # Upload AAR
           curl -X PUT \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
-            --data-binary "@com/beik/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar" \
-            "https://maven.pkg.github.com/${{ github.repository }}/com/beik/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar"
+            --data-binary "@com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar" \
+            "https://maven.pkg.github.com/${{ github.repository }}/com/zero/xray-core/${{ github.event.inputs.version }}/xray-core-${{ github.event.inputs.version }}.aar"
           
           echo "Published to GitHub Packages"
